@@ -1,5 +1,5 @@
-#include "F-front.h"
 #include "F-second-pass.h"
+#include "F-front.h"
 
 /* #define FE_DEBUG */
 #ifdef FE_DEBUG
@@ -11,147 +11,143 @@
 #define SP_LIST_TYPE_EXPR 2
 
 typedef struct sp_list {
-    struct sp_list *next;
-    char type;
-    char err_no;
-    short int nest_level;
-    lineno_info *line;
-    EXT_ID nest_ext_id[MAX_UNIT_CTL_CONTAINS];
-    union {
-        ID id;
-        expr ep;
-    } info;
+  struct sp_list *next;
+  char type;
+  char err_no;
+  short int nest_level;
+  lineno_info *line;
+  EXT_ID nest_ext_id[MAX_UNIT_CTL_CONTAINS];
+  union {
+    ID id;
+    expr ep;
+  } info;
 } SP_LIST;
 
 SP_LIST *sp_list_head;
 
-void second_pass_init()
-{
-    sp_list_head = NULL;
+void second_pass_init() { sp_list_head = NULL; }
+
+static void link_sp_list(SP_LIST *list) {
+  if (sp_list_head == NULL) {
+    sp_list_head = list;
+    list->next = NULL;
+  } else {
+    list->next = sp_list_head;
+    sp_list_head = list;
+  }
 }
 
-static void link_sp_list(SP_LIST *list)
-{
-    if(sp_list_head == NULL){
-        sp_list_head = list;
-        list->next = NULL;
-    } else {
-        list->next = sp_list_head;
-        sp_list_head = list;
-    }
-}
-
-void remove_sp_list(SP_LIST *list)
-{
-    list->type = SP_LIST_TYPE_NONE;
-    list->err_no = 0;
+void remove_sp_list(SP_LIST *list) {
+  list->type = SP_LIST_TYPE_NONE;
+  list->err_no = 0;
 }
 
 /* Check potential flagged undefined variable that have been switch to proc */
 void sp_check(ID id) {
-    SP_LIST *list = sp_list_head;
-    SP_LIST *prev = NULL;
-    while(list) {
-        SP_LIST *next = list->next;
-        //printf("item %s\n", ID_NAME(list->info.id));
-        if(list->err_no == SP_ERR_UNDEF_TYPE_VAR) {
-            // ID was flagged, now proc so error can be removed
-            if(strcmp(ID_NAME(id), ID_NAME(list->info.id)) == 0) {
-              if(list == sp_list_head) {
-                // Item is the head. Point head to next element.
-                list->next = NULL;
-                sp_list_head = next;
-                free((void*)list);
-              } else {
-                // Item is in middle of the list or tail
-                prev->next = next;
-                free((void*)list);
-              }
-            }
+  SP_LIST *list = sp_list_head;
+  SP_LIST *prev = NULL;
+  while (list) {
+    SP_LIST *next = list->next;
+    // printf("item %s\n", ID_NAME(list->info.id));
+    if (list->err_no == SP_ERR_UNDEF_TYPE_VAR) {
+      // ID was flagged, now proc so error can be removed
+      if (strcmp(ID_NAME(id), ID_NAME(list->info.id)) == 0) {
+        if (list == sp_list_head) {
+          // Item is the head. Point head to next element.
+          list->next = NULL;
+          sp_list_head = next;
+          free((void *)list);
+        } else {
+          // Item is in middle of the list or tail
+          prev->next = next;
+          free((void *)list);
         }
-        prev = list;
-        list = next;
+      }
     }
+    prev = list;
+    list = next;
+  }
 }
 
-void sp_link_id(ID id, int err_no, lineno_info *line)
-{
+void sp_link_id(ID id, int err_no, lineno_info *line) {
   SP_LIST *list;
   int i;
 
-  for(list = sp_list_head; list != NULL; list = list->next){
-      if(list->type == SP_LIST_TYPE_NONE) continue;
-      if(list->info.id == id) return;
+  for (list = sp_list_head; list != NULL; list = list->next) {
+    if (list->type == SP_LIST_TYPE_NONE)
+      continue;
+    if (list->info.id == id)
+      return;
   }
 
   /* printf("!!! debug sp_link_id(%s)\n", ID_NAME(id)); */
-  list = XMALLOC(SP_LIST*, sizeof(SP_LIST));
+  list = XMALLOC(SP_LIST *, sizeof(SP_LIST));
   list->next = NULL;
   list->info.id = id;
   list->type = SP_LIST_TYPE_ID;
   list->nest_level = unit_ctl_level;
   list->err_no = err_no;
   list->line = line;
-  for(i=0; i<=unit_ctl_level; i++){
+  for (i = 0; i <= unit_ctl_level; i++) {
     list->nest_ext_id[i] = UNIT_CTL_CURRENT_EXT_ID(unit_ctls[i]);
   }
   link_sp_list(list);
 }
 
-void sp_link_expr(expr ep, int err_no, lineno_info *line)
-{
+void sp_link_expr(expr ep, int err_no, lineno_info *line) {
   SP_LIST *list;
   int i;
 
-  for(list = sp_list_head; list != NULL; list = list->next){
-      if(list->type == SP_LIST_TYPE_NONE) continue;
-      if(list->info.ep == ep) return;
+  for (list = sp_list_head; list != NULL; list = list->next) {
+    if (list->type == SP_LIST_TYPE_NONE)
+      continue;
+    if (list->info.ep == ep)
+      return;
   }
 
   /* printf("!!! debug sp_link_expr(%s)\n", _expr_code[EXPR_CODE(ep)]); */
-  list = XMALLOC(SP_LIST*, sizeof(SP_LIST));
+  list = XMALLOC(SP_LIST *, sizeof(SP_LIST));
   list->next = NULL;
   list->info.ep = ep;
   list->type = SP_LIST_TYPE_EXPR;
   list->nest_level = unit_ctl_level;
   list->err_no = err_no;
   list->line = line;
-  for(i=0; i<=unit_ctl_level; i++){
+  for (i = 0; i <= unit_ctl_level; i++) {
     list->nest_ext_id[i] = UNIT_CTL_CURRENT_EXT_ID(unit_ctls[i]);
   }
   link_sp_list(list);
 }
 
-static int second_pass_clean()
-{
-  int err_num=0;
+static int second_pass_clean() {
+  int err_num = 0;
   SP_LIST *list = sp_list_head;
 
-  while(list){
+  while (list) {
     SP_LIST *next = list->next;
     /* error */
-    switch(list->err_no){
+    switch (list->err_no) {
     case SP_ERR_UNDEF_TYPE_VAR: /* 1 */
       current_line = list->line;
-      error("attempt to use undefined type variable, %s", ID_NAME(list->info.id));
+      error("attempt to use undefined type variable, %s",
+            ID_NAME(list->info.id));
       err_num++;
       break;
     case SP_ERR_CHAR_LEN: /* 2*/
-      error_at_node(list->info.ep,
-                    "character string length must be integer.");
+      error_at_node(list->info.ep, "character string length must be integer.");
       err_num++;
       break;
     case SP_ERR_UNDEF_TYPE_FUNC: /* 4 */
       current_line = list->line;
       TYPE_DESC tp = list->info.id->type;
-      if (tp &&
-          !TYPE_IS_NOT_FIXED(tp) &&
-          FUNCTION_TYPE_RETURN_TYPE(tp) &&
-          !TYPE_IS_NOT_FIXED(FUNCTION_TYPE_RETURN_TYPE(tp))) break;
-      error("attempt to use undefined type function, %s", ID_NAME(list->info.id));
+      if (tp && !TYPE_IS_NOT_FIXED(tp) && FUNCTION_TYPE_RETURN_TYPE(tp) &&
+          !TYPE_IS_NOT_FIXED(FUNCTION_TYPE_RETURN_TYPE(tp)))
+        break;
+      error("attempt to use undefined type function, %s",
+            ID_NAME(list->info.id));
       err_num++;
       break;
-    case SP_ERR_FATAL:  /* 3 */
+    case SP_ERR_FATAL: /* 3 */
       current_line = list->line;
       error("%s: invalid code", SYM_NAME(EXPR_SYM(list->info.ep)));
       err_num++;
@@ -159,41 +155,38 @@ static int second_pass_clean()
     default:
       break;
     }
-    free((void*)list);
+    free((void *)list);
     list = next;
   }
 
   return err_num;
 }
 
-
 #ifdef FE_DEBUG
-static int slen=0;
+static int slen = 0;
 
-static void second_pass_expv_scan(expv v)
-{
+static void second_pass_expv_scan(expv v) {
   enum expr_code code;
   int i;
 
-  if(v == NULL)
+  if (v == NULL)
     return;
   code = EXPV_CODE(v);
   printf(" body: ");
-  for(i=0; i<slen; i++) printf("  ");
+  for (i = 0; i < slen; i++)
+    printf("  ");
   printf("%s\n", _expr_code[code]);
-  switch(code) {
+  switch (code) {
   /*
    * child elements
    */
-  case LIST:
-    {
-      list lp;
-      slen++;
-      FOR_ITEMS_IN_LIST(lp, v)
-        second_pass_expv_scan(LIST_ITEM(lp));
-      slen--;
-    }
-    break;
+  case LIST: {
+    list lp;
+    slen++;
+    FOR_ITEMS_IN_LIST(lp, v)
+    second_pass_expv_scan(LIST_ITEM(lp));
+    slen--;
+  } break;
 
   /*
    * identifiers
@@ -220,61 +213,51 @@ static void second_pass_expv_scan(expv v)
   /*
    * general statements
    */
-  case EXPR_STATEMENT:
-    {
-      expv v1;
-      v1 = EXPR_ARG1(v);        /* expression */
-    }
-    break;
-  case F_DO_STATEMENT:
-    {
-      expv vl, vr, v1, v2, v3, v4, v5;
-      vl = EXPR_ARG1(v);        /* ConstructName */
-      vr = EXPR_ARG2(v);        /* condition */
-      v1 = EXPR_ARG1(vr);       /* do var */
-      v2 = EXPR_ARG2(vr);       /* init variable */
-      v3 = EXPR_ARG3(vr);       /* end variable */
-      v4 = EXPR_ARG4(vr);       /* step variable */
-      v5 = EXPR_ARG5(vr);       /* body */
-      second_pass_expv_scan(v5);
-    }
-    break;
-  case F_DOWHILE_STATEMENT:
-    {
-      expv v1, v2, v3;
-      v1 = EXPR_ARG1(v);        /* condition */
-      v2 = EXPR_ARG2(v);        /* body */
-      v3 = EXPR_ARG3(v);        /* ConstructName */
-      second_pass_expv_scan(v2);
-    }
-    break;
-  case F03_SELECTTYPE_STATEMENT:
-    {
-      expv v3, v4;
-      list lp = EXPR_LIST(v);   /* condition & body */
-      v3 = EXPR_ARG3(v);        /* ConstructName */
-      v4 = EXPR_ARG4(v);        /* associate name */
+  case EXPR_STATEMENT: {
+    expv v1;
+    v1 = EXPR_ARG1(v); /* expression */
+  } break;
+  case F_DO_STATEMENT: {
+    expv vl, vr, v1, v2, v3, v4, v5;
+    vl = EXPR_ARG1(v);  /* ConstructName */
+    vr = EXPR_ARG2(v);  /* condition */
+    v1 = EXPR_ARG1(vr); /* do var */
+    v2 = EXPR_ARG2(vr); /* init variable */
+    v3 = EXPR_ARG3(vr); /* end variable */
+    v4 = EXPR_ARG4(vr); /* step variable */
+    v5 = EXPR_ARG5(vr); /* body */
+    second_pass_expv_scan(v5);
+  } break;
+  case F_DOWHILE_STATEMENT: {
+    expv v1, v2, v3;
+    v1 = EXPR_ARG1(v); /* condition */
+    v2 = EXPR_ARG2(v); /* body */
+    v3 = EXPR_ARG3(v); /* ConstructName */
+    second_pass_expv_scan(v2);
+  } break;
+  case F03_SELECTTYPE_STATEMENT: {
+    expv v3, v4;
+    list lp = EXPR_LIST(v); /* condition & body */
+    v3 = EXPR_ARG3(v);      /* ConstructName */
+    v4 = EXPR_ARG4(v);      /* associate name */
 
-      /* LIST_ITEM(lp) : select(var) ?*/
-      if(LIST_NEXT(lp) && LIST_ITEM(LIST_NEXT(lp))) {
-        FOR_ITEMS_IN_LIST(lp, LIST_ITEM(LIST_NEXT(lp)))
-          second_pass_expv_scan(LIST_ITEM(lp));
-      }
+    /* LIST_ITEM(lp) : select(var) ?*/
+    if (LIST_NEXT(lp) && LIST_ITEM(LIST_NEXT(lp))) {
+      FOR_ITEMS_IN_LIST(lp, LIST_ITEM(LIST_NEXT(lp)))
+      second_pass_expv_scan(LIST_ITEM(lp));
     }
-    break;
-  case F_SELECTCASE_STATEMENT:
-    {
-      expv v3, v4;
-      list lp = EXPR_LIST(v);   /* condition & body */
-      v3 = EXPR_ARG3(v);        /* ConstructName */
+  } break;
+  case F_SELECTCASE_STATEMENT: {
+    expv v3, v4;
+    list lp = EXPR_LIST(v); /* condition & body */
+    v3 = EXPR_ARG3(v);      /* ConstructName */
 
-      /* LIST_ITEM(lp) : select(var) ?*/
-      if(LIST_NEXT(lp) && LIST_ITEM(LIST_NEXT(lp))) {
-        FOR_ITEMS_IN_LIST(lp, LIST_ITEM(LIST_NEXT(lp)))
-          second_pass_expv_scan(LIST_ITEM(lp));
-      }
+    /* LIST_ITEM(lp) : select(var) ?*/
+    if (LIST_NEXT(lp) && LIST_ITEM(LIST_NEXT(lp))) {
+      FOR_ITEMS_IN_LIST(lp, LIST_ITEM(LIST_NEXT(lp)))
+      second_pass_expv_scan(LIST_ITEM(lp));
     }
-    break;
+  } break;
   case IF_STATEMENT:
   case F_WHERE_STATEMENT:
   case F_RETURN_STATEMENT:
@@ -285,17 +268,15 @@ static void second_pass_expv_scan(expv v)
     break;
   case F03_TYPEIS_STATEMENT:
   case F03_CLASSIS_STATEMENT:
-  case F_CASELABEL_STATEMENT:
-    {
-      expv v1, v2, v3;
-      v1 = EXPR_ARG1(v);        /* condition */
-      v2 = EXPR_ARG2(v);        /* body */
-      v3 = EXPR_ARG3(v);        /* ConstructName */
-      slen++;
-      second_pass_expv_scan(v2);
-      slen--;
-    }
-    break;
+  case F_CASELABEL_STATEMENT: {
+    expv v1, v2, v3;
+    v1 = EXPR_ARG1(v); /* condition */
+    v2 = EXPR_ARG2(v); /* body */
+    v3 = EXPR_ARG3(v); /* ConstructName */
+    slen++;
+    second_pass_expv_scan(v2);
+    slen--;
+  } break;
   case F_STOP_STATEMENT:
   case F_PAUSE_STATEMENT:
   case F_LET_STATEMENT:
@@ -359,7 +340,6 @@ static void second_pass_expv_scan(expv v)
   case F_CONCAT_EXPR:
   case LOG_NOT_EXPR:
   case UNARY_MINUS_EXPR:
-
 
   case F95_USER_DEFINED_BINARY_EXPR:
   case F95_USER_DEFINED_UNARY_EXPR:
@@ -538,22 +518,22 @@ static void second_pass_expv_scan(expv v)
 }
 #endif
 
-int second_pass()
-{
+int second_pass() {
 #ifdef FE_DEBUG
   EXT_ID ep;
-  ID     id;
-  list   lp;
+  ID id;
+  list lp;
   FOREACH_EXT_ID(ep, EXTERNAL_SYMBOLS) {
-    if(EXT_SYM(ep)){
+    if (EXT_SYM(ep)) {
       printf("ext symbol name: %s\n", SYM_NAME(EXT_SYM(ep)));
-      FOR_ITEMS_IN_LIST(lp, EXT_PROC_ARGS(ep)){
+      FOR_ITEMS_IN_LIST(lp, EXT_PROC_ARGS(ep)) {
         printf("  args type: %s\n", _expr_code[EXPR_CODE(LIST_ITEM(lp))]);
       }
-      FOREACH_ID(id, EXT_PROC_ID_LIST(ep)){
-        if(id){
-          printf("  proc symbol name: %s(%p)(class=%d)", ID_NAME(id), ID_SYM(id), ID_CLASS(id));
-          if(ID_TYPE(id) == NULL){
+      FOREACH_ID(id, EXT_PROC_ID_LIST(ep)) {
+        if (id) {
+          printf("  proc symbol name: %s(%p)(class=%d)", ID_NAME(id),
+                 ID_SYM(id), ID_CLASS(id));
+          if (ID_TYPE(id) == NULL) {
             printf(" (type null)");
           } else {
             printf(" (type = %d)", ID_TYPE(id)->basic_type);
@@ -561,11 +541,12 @@ int second_pass()
           printf("\n");
         }
       }
-      if(EXT_PROC_CONT_EXT_SYMS(ep)){
-        FOREACH_ID(id, EXT_PROC_ID_LIST(EXT_PROC_CONT_EXT_SYMS(ep))){
-          if(id){
-            printf("  contains symbol name: %s(%p)(class=%d)", ID_NAME(id), ID_SYM(id), ID_CLASS(id));
-            if(ID_TYPE(id) == NULL){
+      if (EXT_PROC_CONT_EXT_SYMS(ep)) {
+        FOREACH_ID(id, EXT_PROC_ID_LIST(EXT_PROC_CONT_EXT_SYMS(ep))) {
+          if (id) {
+            printf("  contains symbol name: %s(%p)(class=%d)", ID_NAME(id),
+                   ID_SYM(id), ID_CLASS(id));
+            if (ID_TYPE(id) == NULL) {
               printf(" (type null)");
             } else {
               printf(" (type = %d)", ID_TYPE(id)->basic_type);
@@ -574,30 +555,29 @@ int second_pass()
           }
         }
       }
-/* EXT_PROC_CONT_EXT_SYMS */
+      /* EXT_PROC_CONT_EXT_SYMS */
       FOREACH_ID(id, EXT_PROC_COMMON_ID_LIST(ep)) {
-        if(id){
+        if (id) {
           printf("  common block symbol name: %s", ID_NAME(id));
           printf("\n");
         }
       }
     }
 
-    if(EXT_PROC_BODY(ep)){
+    if (EXT_PROC_BODY(ep)) {
       EXT_ID contains_1, contains_1_ep;
       EXT_ID contains_2, contains_2_ep;
       second_pass_expv_scan(EXT_PROC_BODY(ep));
       contains_1 = EXT_PROC_CONT_EXT_SYMS(ep);
-      if(contains_1){
+      if (contains_1) {
         slen++;
-        FOREACH_EXT_ID(contains_1_ep, contains_1){
+        FOREACH_EXT_ID(contains_1_ep, contains_1) {
           second_pass_expv_scan(EXT_PROC_BODY(contains_1_ep));
           contains_2 = EXT_PROC_CONT_EXT_SYMS(contains_1_ep);
-          if(contains_2){
+          if (contains_2) {
             slen++;
-            FOREACH_EXT_ID(contains_2_ep, contains_2){
+            FOREACH_EXT_ID(contains_2_ep, contains_2) {
               second_pass_expv_scan(EXT_PROC_BODY(contains_2_ep));
-
             }
             slen--;
           }
@@ -610,22 +590,25 @@ int second_pass()
 
   SP_LIST *sp_list;
 
-  for(sp_list = sp_list_head; sp_list != NULL; sp_list = sp_list->next){
-      int i;
+  for (sp_list = sp_list_head; sp_list != NULL; sp_list = sp_list->next) {
+    int i;
 
-      if(sp_list->type == SP_LIST_TYPE_NONE) continue;
+    if (sp_list->type == SP_LIST_TYPE_NONE)
+      continue;
 
 #ifdef FE_DEBUG
     /* debug */
-    if(sp_list->type == SP_LIST_TYPE_ID){ /* ID */
+    if (sp_list->type == SP_LIST_TYPE_ID) { /* ID */
       printf(" undefined symbol name: %s(%p) class=%d: nest=(",
-             ID_NAME(sp_list->info.id), ID_SYM(sp_list->info.id), ID_CLASS(sp_list->info.id));
-    } else {                    /* expr */
-      printf(" undefined expr: %s: nest=(", _expr_code[EXPR_CODE(sp_list->info.ep)]);
+             ID_NAME(sp_list->info.id), ID_SYM(sp_list->info.id),
+             ID_CLASS(sp_list->info.id));
+    } else { /* expr */
+      printf(" undefined expr: %s: nest=(",
+             _expr_code[EXPR_CODE(sp_list->info.ep)]);
     }
-    for(i=0; i<=sp_list->nest_level; i++){
+    for (i = 0; i <= sp_list->nest_level; i++) {
       printf("%s", SYM_NAME(EXT_SYM(sp_list->nest_ext_id[i])));
-      if(i!=sp_list->nest_level){
+      if (i != sp_list->nest_level) {
         printf(",");
       }
     }
@@ -633,34 +616,36 @@ int second_pass()
 #endif
 
     /* fix ID & expr */
-    if(sp_list->type == SP_LIST_TYPE_ID){ /* ID */
+    if (sp_list->type == SP_LIST_TYPE_ID) { /* ID */
       int is_exist = 0;
-      if(EXT_PROC_CONT_EXT_SYMS(sp_list->nest_ext_id[0])){
+      if (EXT_PROC_CONT_EXT_SYMS(sp_list->nest_ext_id[0])) {
         ID id;
-        FOREACH_ID(id, EXT_PROC_ID_LIST(EXT_PROC_CONT_EXT_SYMS(sp_list->nest_ext_id[0]))){
-          if(ID_CLASS(id) == CL_PROC){
-            if(ID_SYM(id) == ID_SYM(sp_list->info.id)){
+        FOREACH_ID(id, EXT_PROC_ID_LIST(
+                           EXT_PROC_CONT_EXT_SYMS(sp_list->nest_ext_id[0]))) {
+          if (ID_CLASS(id) == CL_PROC) {
+            if (ID_SYM(id) == ID_SYM(sp_list->info.id)) {
               is_exist = 1;
               break;
             }
           }
         }
       }
-      if(!is_exist){
-        for(i=sp_list->nest_level-1; i>=0 && !is_exist; i--){
+      if (!is_exist) {
+        for (i = sp_list->nest_level - 1; i >= 0 && !is_exist; i--) {
           ID id;
-          FOREACH_ID(id, EXT_PROC_ID_LIST(sp_list->nest_ext_id[i])){
-            if(ID_SYM(id) == ID_SYM(sp_list->info.id)){
+          FOREACH_ID(id, EXT_PROC_ID_LIST(sp_list->nest_ext_id[i])) {
+            if (ID_SYM(id) == ID_SYM(sp_list->info.id)) {
               is_exist = 1;
               break;
             }
           }
         }
       }
-      if(is_exist){
-        ID id, prev=NULL;
-        FOREACH_ID(id, EXT_PROC_ID_LIST(sp_list->nest_ext_id[sp_list->nest_level])){
-          if(id == sp_list->info.id){
+      if (is_exist) {
+        ID id, prev = NULL;
+        FOREACH_ID(
+            id, EXT_PROC_ID_LIST(sp_list->nest_ext_id[sp_list->nest_level])) {
+          if (id == sp_list->info.id) {
             if (ID_TYPE(id) && IS_FUNCTION_TYPE(ID_TYPE(id))) {
               /*
                * Removing function identifier causes error.
@@ -672,10 +657,11 @@ int second_pass()
               remove_sp_list(sp_list);
               break;
             }
-            if(prev){
+            if (prev) {
               prev->next = id->next;
             } else {
-              EXT_PROC_ID_LIST(sp_list->nest_ext_id[sp_list->nest_level]) = id->next;
+              EXT_PROC_ID_LIST(sp_list->nest_ext_id[sp_list->nest_level]) =
+                  id->next;
             }
 
             free(id);
@@ -686,15 +672,17 @@ int second_pass()
         }
       }
 
-    } else {                    /* expr */
-      if(EXPR_CODE(sp_list->info.ep) == IDENT || EXPR_CODE(sp_list->info.ep) == F_VAR){
+    } else { /* expr */
+      if (EXPR_CODE(sp_list->info.ep) == IDENT ||
+          EXPR_CODE(sp_list->info.ep) == F_VAR) {
         int is_exist = 0;
-        for(i=sp_list->nest_level; i>=0 && !is_exist; i--){
+        for (i = sp_list->nest_level; i >= 0 && !is_exist; i--) {
           ID id;
-          FOREACH_ID(id, EXT_PROC_ID_LIST(sp_list->nest_ext_id[i])){
-            if(ID_SYM(id) == EXPR_SYM(sp_list->info.ep) &&
-               ID_TYPE(id) != NULL){
-              EXPV_TYPE(sp_list->info.ep) = FUNCTION_TYPE_RETURN_TYPE(ID_TYPE(id));
+          FOREACH_ID(id, EXT_PROC_ID_LIST(sp_list->nest_ext_id[i])) {
+            if (ID_SYM(id) == EXPR_SYM(sp_list->info.ep) &&
+                ID_TYPE(id) != NULL) {
+              EXPV_TYPE(sp_list->info.ep) =
+                  FUNCTION_TYPE_RETURN_TYPE(ID_TYPE(id));
               remove_sp_list(sp_list);
               is_exist = 1;
               break;
