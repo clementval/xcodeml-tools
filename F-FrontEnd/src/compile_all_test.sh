@@ -100,6 +100,8 @@ for f in `find -L ${testdata} -type f -a -name '*.f' -o -name '*.f90' -o -name '
     fi
     if test -f ${f}.native.options; then
         additionalNativeOpts=`cat ${f}.native.options`
+    else
+        additionalNativeOpts=""
     fi
     ${frontend} ${frontendOpt} ${F_FRONT_TEST_OPTS} ${fOpts} -I ${testdata} ${f} \
         -o ${xmlOut} > ${errOut} 2>&1
@@ -107,7 +109,7 @@ for f in `find -L ${testdata} -type f -a -name '*.f' -o -name '*.f90' -o -name '
         ${backend} --test ${backendOpt} ${xmlOut} -o ${decompiledSrc} >> ${errOut} 2>&1
         if test $? -eq 0; then
             if test ! -e "${skipNative}" ; then
-                ${nativecomp} ${nativecompOpt} -c ${decompiledSrc} -o ${binOut} >> ${errOut} 2>&1
+                ${nativecomp} ${nativecompOpt} ${additionalNativeOpts} -c ${decompiledSrc} -o ${binOut} >> ${errOut} 2>&1
                 if test $? -eq 0; then
                     if test ! -z ${expectedOut} && test -e ${expectedOut}; then
                         if test `nm ${binOut} | awk '{print $3}' | grep -c main 2>&1` -gt 0; then
@@ -139,6 +141,7 @@ for f in `find -L ${testdata} -type f -a -name '*.f' -o -name '*.f90' -o -name '
                         echo "--- ok : ${b}"
                     fi
                 else
+                    echo "${nativecomp} ${nativecompOpt} ${additionalNativeOpts} -c ${decompiledSrc} -o ${binOut}"
                     echo "--- failed native: ${b}" | tee -a errors.txt
 		    status=1
                 fi
