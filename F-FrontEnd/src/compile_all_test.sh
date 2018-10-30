@@ -141,7 +141,6 @@ for f in `find -L ${testdata} -type f -a -name '*.f' -o -name '*.f90' -o -name '
                         echo "--- ok : ${b}"
                     fi
                 else
-                    echo "${nativecomp} ${nativecompOpt} ${additionalNativeOpts} -c ${decompiledSrc} -o ${binOut}"
                     echo "--- failed native: ${b}" | tee -a errors.txt
 		    status=1
                 fi
